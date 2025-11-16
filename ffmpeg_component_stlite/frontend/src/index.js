@@ -19,6 +19,7 @@ async function ensureFFmpeg() {
 }
 
 async function runFFmpeg(b64_input, command) {
+async function runTrim(b64_input, seconds) {
   await ensureFFmpeg();
 
   // convert base64 to Uint8Array
@@ -31,6 +32,7 @@ async function runFFmpeg(b64_input, command) {
 
   await ffmpeg.writeFile('input.mp4', bytes);
   await ffmpeg.exec(command);
+  await ffmpeg.exec(['-i', 'input.mp4', '-c', 'copy', '-t', seconds.toString(), 'output.webm']);
   const out = await ffmpeg.readFile('output.webm');
 
   // convert Uint8Array back to base64
@@ -61,6 +63,9 @@ function onRender(event) {
     if (args.command && args.data) {
         statusEl.textContent = 'Status: Processing...';
         runFFmpeg(args.data, args.command).then((b64) => {
+    if (args.cmd === 'trim' && args.data) {
+        statusEl.textContent = 'Status: Processing...';
+        runTrim(args.data, args.seconds || 10).then((b64) => {
             Streamlit.setComponentValue({ output: b64 });
             statusEl.textContent = 'Status: Done!';
         }).catch((err) => {

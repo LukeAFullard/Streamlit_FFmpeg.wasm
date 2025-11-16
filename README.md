@@ -67,6 +67,15 @@ from ffmpeg_component_stlite import ffmpeg_process_stlite
 st.title("v2 stlite FFmpeg Component Demo")
 
 f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
+The `ffmpeg_trim_stlite` function provides a simplified interface for trimming videos.
+
+```python
+import streamlit as st
+from ffmpeg_component_stlite import ffmpeg_trim_stlite
+
+st.title("v2 stlite FFmpeg Component Demo")
+
+f = st.file_uploader('Upload a video to trim', type=['mp4', 'mov'])
 
 if f:
     st.video(f)
@@ -83,6 +92,17 @@ if f:
 ```
 
 See `example_stlite_app.py` for a full example with multiple operations.
+    seconds = st.slider("Trim to (seconds):", 1, 30, 10)
+
+    if st.button('Trim Video'):
+        with st.spinner('Processing in browser...'):
+            out = ffmpeg_trim_stlite(data=video_data, seconds=seconds)
+            if out:
+                st.video(out, format='video/webm')
+                st.download_button('Download Trimmed', out, 'trimmed.webm', 'video/webm')
+```
+
+See `example_stlite_app.py` for a full example.
 
 ---
 
