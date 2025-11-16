@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "streamlit-ffmpeg-wasm"
+version = "1.0.0"
+authors = [
+    { name="Jules", email="jules@example.com" },
+]
+description = "Streamlit components for client-side video processing with FFmpeg.wasm."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Framework :: Streamlit",
+]
+dependencies = [
+    "streamlit >= 1.51.0", # Required for stlite component
+]
+
+[project.urls]
+"Homepage" = "https://github.com/example/streamlit-ffmpeg-wasm"
+"Bug Tracker" = "https://github.com/example/streamlit-ffmpeg-wasm/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+"ffmpeg_component" = ["frontend/build/**"]
+"ffmpeg_component_stlite" = ["frontend/public/**", "frontend/src/**"]
