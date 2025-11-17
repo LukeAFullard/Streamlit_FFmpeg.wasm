@@ -2,7 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Streamlit, withStreamlitConnection } from 'streamlit-component-lib';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 
-// Efficient base64 decoding
+/**
+ * Decodes a base64 string into a Uint8Array.
+ * @param {string} base64 The base64-encoded string.
+ * @returns {Uint8Array} The decoded binary data.
+ */
 function base64ToUint8Array(base64) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -13,12 +17,15 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
-// Efficient base64 encoding (chunked to avoid stack overflow)
+/**
+ * Encodes a Uint8Array into a base64 string in chunks to avoid stack overflow.
+ * @param {Uint8Array} bytes The binary data to encode.
+ * @returns {string} The base64-encoded string.
+ */
 function uint8ArrayToBase64(bytes) {
   const CHUNK_SIZE = 0x8000; // 32KB chunks
   let b64 = '';
   for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    // Use apply() for performance
     const chunk = bytes.subarray(i, i + CHUNK_SIZE);
     b64 += String.fromCharCode.apply(null, chunk);
   }
@@ -54,21 +61,22 @@ function App(props) {
     return ff;
   }, [ffmpeg]);
 
-  const processFile = useCallback(async (inputB64, args = []) => {
+  const processFile = useCallback(async (inputB64, args = [], maxSizeMB = 100) => {
     const ff = await ensureFFmpeg();
     setStatus('processing');
     setLogs([]);
 
     const inputFilename = 'input.mp4';
     let outputFilename = null;
+    let inputBytes = null;
 
     try {
       const estimatedSizeMB = (inputB64.length * 0.75) / (1024 * 1024);
-      if (estimatedSizeMB > 150) { // Safety limit
-        throw new Error(`File too large: ${estimatedSizeMB.toFixed(1)}MB. Client-side limit is 150MB.`);
+      if (estimatedSizeMB > maxSizeMB) {
+        throw new Error(`File too large: ${estimatedSizeMB.toFixed(1)}MB. Limit is ${maxSizeMB}MB.`);
       }
 
-      const inputBytes = base64ToUint8Array(inputB64);
+      inputBytes = base64ToUint8Array(inputB64);
       await ff.writeFile(inputFilename, inputBytes);
 
       await ff.exec(args);
@@ -86,17 +94,16 @@ function App(props) {
       Streamlit.setComponentValue({ error: error.message });
 
     } finally {
-      // Cleanup files from virtual filesystem to free up memory
+      // Cleanup files and memory
+      inputBytes = null; // Hint for garbage collection
       try {
-        if (await ff.fileExists(inputFilename)) {
-          await ff.deleteFile(inputFilename);
-        }
-        if (outputFilename && await ff.fileExists(outputFilename)) {
+        await ff.deleteFile(inputFilename);
+      } catch (e) { /* Ignore error if file doesn't exist */ }
+      try {
+        if (outputFilename) {
           await ff.deleteFile(outputFilename);
         }
-      } catch (cleanupError) {
-        console.warn('File cleanup failed:', cleanupError);
-      }
+      } catch (e) { /* Ignore error if file doesn't exist */ }
     }
   }, [ensureFFmpeg]);
 
@@ -104,7 +111,7 @@ function App(props) {
     const renderEventHandler = (event) => {
       const { args } = event.detail;
       if (args.command && args.data) {
-        processFile(args.data, args.command);
+        processFile(args.data, args.command, args.max_size_mb);
       }
     };
 

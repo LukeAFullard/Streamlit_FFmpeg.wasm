@@ -2,10 +2,15 @@ import streamlit.components.v1 as components
 import base64
 import os
 import logging
+import hashlib
 from typing import Optional, List
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 # Set up logger
 logger = logging.getLogger(__name__)
+
+# Check environment variable to determine if we're in development, default to release mode
+_RELEASE = os.getenv("STREAMLIT_COMPONENT_DEV", "0") != "1"
 
 # The v2 component is served statically from the frontend/public directory
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -25,7 +30,8 @@ class FFmpegError(Exception):
 def ffmpeg_process_stlite(
     data: bytes,
     command: List[str],
-    max_size_mb: int = 100
+    max_size_mb: int = 100,
+    timeout: int = 300
 ) -> Optional[bytes]:
     """
     Runs an FFmpeg command on the client-side using a component compatible with stlite.
@@ -59,9 +65,24 @@ def ffmpeg_process_stlite(
 
     try:
         b64_data = base64.b64encode(data).decode('ascii')
-        component_key = f"ffmpeg_stlite_{hash(data)}_{hash(tuple(command))}"
+        data_hash = hashlib.md5(data).hexdigest()[:8]
+        cmd_hash = hashlib.md5(str(command).encode()).hexdigest()[:8]
+        component_key = f"ffmpeg_stlite_{data_hash}_{cmd_hash}"
 
-        result = _component_func(data=b64_data, command=command, key=component_key)
+        def component_call():
+            return _component_func(
+                data=b64_data,
+                command=command,
+                key=component_key,
+                max_size_mb=max_size_mb
+            )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(component_call)
+            try:
+                result = future.result(timeout=timeout)
+            except TimeoutError:
+                raise FFmpegError(f"Processing timed out after {timeout} seconds.")
 
         if result is None:
             logger.warning("Component returned None. This may indicate the user navigated away.")
@@ -82,6 +103,9 @@ def ffmpeg_process_stlite(
 
         return output_data
 
+    except KeyboardInterrupt:
+        logger.warning("Processing was cancelled by the user.")
+        return None
     except FFmpegError:
         raise
     except Exception as e:

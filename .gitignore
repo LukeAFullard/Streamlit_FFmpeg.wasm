@@ -93,4 +93,4 @@ node_modules/
 streamlit.log
 
 # Frontend build output
-/ffmpeg_component/frontend/build/
+/ffmpeg_component_v1/frontend/build/

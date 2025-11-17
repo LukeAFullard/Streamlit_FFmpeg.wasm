@@ -1,17 +1,29 @@
 // For stlite / browser-only use, loaded from CDN
 const { Streamlit } = window.Streamlit;
 
-// The UMD script for @ffmpeg/ffmpeg exposes its exports on window.FFmpegWASM
-if (!window.FFmpegWASM && !window.FFmpeg) {
-  console.error('FFmpeg library not loaded from CDN. Check script tags.');
-  Streamlit.setComponentValue({ error: 'FFmpeg library failed to load' });
+// Robustly check for the FFmpeg library on the window object
+const FFmpegLib = window.FFmpegWASM || window.FFmpeg;
+if (!FFmpegLib) {
+  const errorMsg = 'FFmpeg library not loaded from CDN. Check script tags in index.html.';
+  console.error(errorMsg);
+  Streamlit.setComponentValue({ error: errorMsg });
+  // Render an error message in the component UI
+  const root = document.getElementById('root');
+  if (root) {
+    root.innerHTML = `<div style="color: red;">${errorMsg}</div>`;
+  }
+  // Stop execution if the library is missing
+  throw new Error(errorMsg);
 }
-const FFmpegLib = window.FFmpegWASM || window.FFmpeg; // Fallback for safety
 const { FFmpeg } = FFmpegLib;
 
 let ffmpeg = null;
 
-// Efficient base64 decoding
+/**
+ * Decodes a base64 string into a Uint8Array.
+ * @param {string} base64 The base64-encoded string.
+ * @returns {Uint8Array} The decoded binary data.
+ */
 function base64ToUint8Array(base64) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -22,7 +34,11 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
-// Efficient base64 encoding (chunked)
+/**
+ * Encodes a Uint8Array into a base64 string in chunks to avoid stack overflow.
+ * @param {Uint8Array} bytes The binary data to encode.
+ * @returns {string} The base64-encoded string.
+ */
 function uint8ArrayToBase64(bytes) {
   const CHUNK_SIZE = 0x8000;
   let b64 = '';
@@ -54,18 +70,19 @@ async function ensureFFmpeg() {
   return ffmpeg;
 }
 
-async function runCommand(b64_input, command) {
+async function runCommand(b64_input, command, maxSizeMB = 100) {
   const ff = await ensureFFmpeg();
   const inputFilename = 'input.mp4';
   let outputFilename = null;
+  let bytes = null;
 
   try {
     const estimatedSizeMB = (b64_input.length * 0.75) / (1024 * 1024);
-    if (estimatedSizeMB > 150) {
-        throw new Error(`File too large: ${estimatedSizeMB.toFixed(1)}MB. Client-side limit is 150MB.`);
+    if (estimatedSizeMB > maxSizeMB) {
+        throw new Error(`File too large: ${estimatedSizeMB.toFixed(1)}MB. Limit is ${maxSizeMB}MB.`);
     }
 
-    const bytes = base64ToUint8Array(b64_input);
+    bytes = base64ToUint8Array(b64_input);
     await ff.writeFile(inputFilename, bytes);
 
     await ff.exec(command);
@@ -73,17 +90,16 @@ async function runCommand(b64_input, command) {
     const out = await ff.readFile(outputFilename);
     return uint8ArrayToBase64(new Uint8Array(out));
   } finally {
-      // Cleanup files from virtual filesystem
+      // Cleanup files and memory
+      bytes = null; // Hint for garbage collection
       try {
-        if (await ff.fileExists(inputFilename)) {
-          await ff.deleteFile(inputFilename);
-        }
-        if (outputFilename && await ff.fileExists(outputFilename)) {
+        await ff.deleteFile(inputFilename);
+      } catch (e) { /* Ignore */ }
+      try {
+        if (outputFilename) {
           await ff.deleteFile(outputFilename);
         }
-      } catch(cleanupError) {
-        console.warn('File cleanup failed:', cleanupError);
-      }
+      } catch (e) { /* Ignore */ }
   }
 }
 
@@ -97,7 +113,7 @@ function onRender(event) {
 
     if (args.command && args.data) {
         statusEl.textContent = 'Status: Processing...';
-        runCommand(args.data, args.command).then((b64) => {
+        runCommand(args.data, args.command, args.max_size_mb).then((b64) => {
             Streamlit.setComponentValue({ output: b64 });
             statusEl.textContent = 'Status: Done!';
         }).catch((err) => {
