@@ -30,4 +30,4 @@ where = ["."]
 
 [tool.setuptools.package-data]
 "ffmpeg_component_v1" = ["frontend/build/**"]
-"ffmpeg_component_v2" = ["frontend/public/**", "frontend/src/**"]
+"ffmpeg_component_v2" = ["frontend/public/**"]
