@@ -21,6 +21,10 @@ def ffmpeg_process(data: bytes, command: list):
     result = _component_func(data=b64, command=command)
     if not result:
         return None
+
+    if 'error' in result:
+        raise RuntimeError(result['error'])
+
     out_b64 = result.get('output')
     if out_b64:
         return base64.b64decode(out_b64)
