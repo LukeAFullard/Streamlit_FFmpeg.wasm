@@ -1,0 +1,11 @@
+{
+  "name": "ffmpeg-component-v2-frontend",
+  "version": "1.0.0",
+  "description": "Static frontend for the stlite FFmpeg component.",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^5.2.2"
+  }
+}
