@@ -42,9 +42,9 @@ async function ensureFFmpeg() {
   return ffmpeg;
 }
 
-async function runCommand(b64_input, command, maxSizeMB = 100) {
+async function runCommand(b64_input, command, filename = 'input.mp4', maxSizeMB = 100) {
   const ff = await ensureFFmpeg();
-  const inputFilename = 'input.mp4';
+  const inputFilename = filename;
   let outputFilename = null;
   let bytes = null;
 
@@ -98,7 +98,7 @@ function onRender(event) {
         statusEl.textContent = 'Processing...';
         loader.style.display = 'inline-block';
 
-        runCommand(args.data, args.command, args.max_size_mb).then((b64) => {
+        runCommand(args.data, args.command, args.filename, args.max_size_mb).then((b64) => {
             Streamlit.setComponentValue({ output: b64 });
             statusEl.textContent = 'Done!';
             loader.style.display = 'none';

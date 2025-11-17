@@ -33,12 +33,12 @@ function App(props) {
     return ff;
   }, [ffmpeg]);
 
-  const processFile = useCallback(async (inputB64, args = [], maxSizeMB = 100) => {
+  const processFile = useCallback(async (inputB64, args = [], filename = 'input.mp4', maxSizeMB = 100) => {
     const ff = await ensureFFmpeg();
     setStatus('processing');
     setLogs([]);
 
-    const inputFilename = 'input.mp4';
+    const inputFilename = filename;
     let outputFilename = null;
     let inputBytes = null;
 
@@ -83,7 +83,7 @@ function App(props) {
     const renderEventHandler = (event) => {
       const { args } = event.detail;
       if (args.command && args.data) {
-        processFile(args.data, args.command, args.max_size_mb);
+        processFile(args.data, args.command, args.filename, args.max_size_mb);
       }
     };
 
