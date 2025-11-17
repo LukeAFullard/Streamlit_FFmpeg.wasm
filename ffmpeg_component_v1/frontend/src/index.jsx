@@ -36,7 +36,8 @@ function App(props) {
 
     await ff.writeFile('input.mp4', inputBytes);
     await ff.exec(args);
-    const out = await ff.readFile('output.webm');
+    const outputFilename = args[args.length - 1];
+    const out = await ff.readFile(outputFilename);
 
     const uint8Array = new Uint8Array(out);
     const b64 = btoa(String.fromCharCode(...uint8Array));
