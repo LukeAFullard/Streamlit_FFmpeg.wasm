@@ -1,9 +1,13 @@
-
 import streamlit.components.v1 as components
 import base64
 import os
+import logging
+from typing import Optional, List
 
-# The component is designed to be served statically, so we point to the public directory
+# Set up logger
+logger = logging.getLogger(__name__)
+
+# The v2 component is served statically from the frontend/public directory
 parent_dir = os.path.dirname(os.path.abspath(__file__))
 component_dir = os.path.join(parent_dir, "frontend/public")
 
@@ -13,28 +17,73 @@ _component_func = components.declare_component(
 )
 
 
-def ffmpeg_process_stlite(data: bytes, command: list):
+class FFmpegError(Exception):
+    """Custom exception for FFmpeg processing errors."""
+    pass
+
+
+def ffmpeg_process_stlite(
+    data: bytes,
+    command: List[str],
+    max_size_mb: int = 100
+) -> Optional[bytes]:
     """
-    Runs an arbitrary FFmpeg command on the client-side using a component
-    compatible with stlite.
+    Runs an FFmpeg command on the client-side using a component compatible with stlite.
 
     Args:
-        data (bytes): The video data to process.
-        command (list): The FFmpeg command arguments.
+        data: Input video file as bytes.
+        command: FFmpeg command arguments (e.g., ['-i', 'input.mp4', '-t', '5', 'output.webm']).
+        max_size_mb: Maximum file size in MB (default 100MB).
 
     Returns:
-        bytes: The processed video data, or None if an error occurred.
+        Processed video as bytes, or None if the operation is cancelled by the user.
+
+    Raises:
+        ValueError: If input validation fails.
+        FFmpegError: If FFmpeg processing fails on the client-side.
     """
-    b64 = base64.b64encode(data).decode('ascii')
-    res = _component_func(data=b64, command=command)
+    if not data:
+        raise ValueError("Input data cannot be empty.")
 
-    if not res:
-        return None
+    file_size_mb = len(data) / (1024 * 1024)
+    if file_size_mb > max_size_mb:
+        raise ValueError(
+            f"File is too large ({file_size_mb:.1f}MB). "
+            f"Maximum allowed size is {max_size_mb}MB."
+        )
 
-    if 'error' in res:
-        raise RuntimeError(res['error'])
+    if not command or not isinstance(command, list):
+        raise ValueError("The 'command' argument must be a non-empty list of strings.")
 
-    out_b64 = res.get('output')
-    if out_b64:
-        return base64.b64decode(out_b64)
-    return None
+    logger.info(f"Processing {file_size_mb:.1f}MB file with command: {' '.join(command)}")
+
+    try:
+        b64_data = base64.b64encode(data).decode('ascii')
+        component_key = f"ffmpeg_stlite_{hash(data)}_{hash(tuple(command))}"
+
+        result = _component_func(data=b64_data, command=command, key=component_key)
+
+        if result is None:
+            logger.warning("Component returned None. This may indicate the user navigated away.")
+            return None
+
+        if 'error' in result:
+            error_msg = result['error']
+            logger.error(f"FFmpeg processing failed on the client: {error_msg}")
+            raise FFmpegError(f"A client-side FFmpeg error occurred: {error_msg}")
+
+        output_b64 = result.get('output')
+        if not output_b64:
+            raise FFmpegError("Processing completed, but the component did not return any output data.")
+
+        output_data = base64.b64decode(output_b64)
+        output_size_mb = len(output_data) / (1024 * 1024)
+        logger.info(f"Processing successful. Output size: {output_size_mb:.1f}MB")
+
+        return output_data
+
+    except FFmpegError:
+        raise
+    except Exception as e:
+        logger.exception("An unexpected error occurred while running the stlite FFmpeg component.")
+        raise FFmpegError(f"An unexpected error occurred: {e}") from e
