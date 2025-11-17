@@ -51,28 +51,48 @@ Here are some of the things you can do:
 
 Ideal for server-hosted Streamlit applications.
 
+**Example:**
 ```python
 import streamlit as st
-from ffmpeg_component_v1 import ffmpeg_process
+from ffmpeg_component_v1 import ffmpeg_process, FFmpegError
+from typing import List, Optional
 
 st.title("v1 FFmpeg Component Demo")
 
 f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
 
 if f:
-    st.video(f)
     video_data = f.getvalue()
-
-    # Example: Trim to first 5 seconds
-    if st.button('Trim to 5 seconds'):
-        with st.spinner('Processing...'):
-            command = ['-i', 'input.mp4', '-t', '5', '-c', 'copy', 'output.webm']
-            out = ffmpeg_process(data=video_data, command=command)
-            if out:
-                st.video(out, format='video/webm')
-                st.download_button('Download Trimmed', out, 'trimmed.webm', 'video/webm')
+    try:
+        command = ['-i', 'input.mp4', '-t', '5', '-c', 'copy', 'output.webm']
+        out = ffmpeg_process(data=video_data, command=command)
+        st.video(out, format='video/webm')
+    except (FFmpegError, ValueError) as e:
+        st.error(e)
 ```
 See `example_app.py` for more detailed examples.
+
+#### API Reference: `ffmpeg_process`
+
+```python
+ffmpeg_process(
+    data: bytes,
+    command: List[str],
+    max_size_mb: int = 100
+) -> Optional[bytes]
+```
+
+*   **`data`**: The raw byte content of the media file to be processed.
+*   **`command`**: A list of strings representing the FFmpeg command-line arguments (e.g., `['-i', 'input.mp4', '-t', '5', 'output.webm']`).
+*   **`max_size_mb`**: The maximum allowable file size in megabytes. Defaults to `100`. If the input `data` exceeds this size, a `ValueError` is raised.
+
+**Returns:**
+*   The processed media file as `bytes` on success.
+*   `None` if the component does not return data (e.g., the user navigates away).
+
+**Raises:**
+*   **`ValueError`**: If the input `data` is empty, the `command` is invalid, or the file size exceeds `max_size_mb`.
+*   **`FFmpegError`**: If an error occurs during processing on the client-side. The original error message from FFmpeg.wasm is included.
 
 ---
 
@@ -82,41 +102,108 @@ Designed for browser-only environments like **stlite**.
 
 **Compatibility:** Requires **Streamlit version 1.51.0 or newer**.
 
+**Example:**
 ```python
 import streamlit as st
-from ffmpeg_component_v2 import ffmpeg_process_stlite
+from ffmpeg_component_v2 import ffmpeg_process_stlite, FFmpegError
+from typing import List, Optional
 
 st.title("v2 stlite FFmpeg Component Demo")
 
 f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
 
 if f:
-    st.video(f)
     video_data = f.getvalue()
-
-    if st.button('Convert to Grayscale'):
-        with st.spinner('Processing in browser...'):
-            command = ['-i', 'input.mp4', '-vf', 'format=gray', 'output.webm']
-            out = ffmpeg_process_stlite(data=video_data, command=command)
-            if out:
-                st.video(out, format='video/webm')
-                st.download_button('Download Grayscale', out, 'grayscale.webm', 'video/webm')
+    try:
+        command = ['-i', 'input.mp4', '-vf', 'format=gray', 'output.webm']
+        out = ffmpeg_process_stlite(data=video_data, command=command)
+        st.video(out, format='video/webm')
+    except (FFmpegError, ValueError) as e:
+        st.error(e)
 ```
 See `example_stlite_app.py` for more detailed examples.
+
+#### API Reference: `ffmpeg_process_stlite`
+
+The API for the v2 component is identical to the v1 component.
+
+```python
+ffmpeg_process_stlite(
+    data: bytes,
+    command: List[str],
+    max_size_mb: int = 100
+) -> Optional[bytes]
+```
+
+*   **`data`**: The raw byte content of the media file.
+*   **`command`**: A list of FFmpeg command-line arguments.
+*   **`max_size_mb`**: The maximum allowable file size in megabytes. Defaults to `100`.
+
+**Returns:**
+*   The processed media file as `bytes` on success, or `None`.
+
+**Raises:**
+*   **`ValueError`**: For invalid inputs.
+*   **`FFmpegError`**: For client-side processing errors.
+
+---
+
+## Limitations and Best Practices
+
+Client-side processing with FFmpeg.wasm is powerful, but it's important to be aware of the limitations imposed by the browser environment.
+
+*   **Browser Memory:** FFmpeg requires significant memory to process media files. During processing, it may use up to **3-4 times the original file size** in memory. A browser tab that consumes too much memory may crash.
+*   **File Size Recommendations:** To ensure stability, especially on mobile devices, it is highly recommended to enforce file size limits.
+    *   **Desktop:** Files up to **100 MB** are generally safe to process.
+    *   **Mobile:** Files should ideally be kept under **20-30 MB**, as mobile browsers have more restrictive memory limits.
+*   **Performance:** Complex FFmpeg operations that involve re-encoding (e.g., changing video codecs, applying complex filters) will be significantly slower than simpler operations that only copy streams (e.g., trimming with `-c copy`). Inform your users that processing may take time.
+*   **Error Handling:** Always wrap calls to the component functions in a `try...except` block to gracefully handle potential `ValueError` (for oversized files) and `FFmpegError` (for processing failures) exceptions.
 
 ---
 
 ## Development
 
-1.  **Install Python dependencies:**
+This project uses Python with Streamlit for the backend and Node.js for the v1 component's frontend. The v2 component is static and requires no build step.
+
+### Initial Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/example/streamlit-ffmpeg-wasm.git
+    cd streamlit-ffmpeg-wasm
+    ```
+2.  **Install Python dependencies:**
     ```bash
     pip install streamlit
     ```
-2.  **Build the v1 frontend (if modifying):**
+3.  **Install frontend dependencies for the v1 component:**
     ```bash
-    cd ffmpeg_component_v1/frontend
-    npm install
-    npm run build
+    npm install --prefix ffmpeg_component_v1/frontend
     ```
 
-The v2 component requires no build step.
+### Running the v1 Component in Development Mode
+
+Development mode for the v1 component uses the Vite dev server for hot-reloading, which is much faster than rebuilding on every change.
+
+1.  **Start the frontend dev server:**
+    Open a new terminal and run:
+    ```bash
+    npm run dev --prefix ffmpeg_component_v1/frontend
+    ```
+    This will start the Vite server, typically on `http://localhost:5173`.
+
+2.  **Run the Streamlit example app:**
+    In your original terminal, set the environment variable to enable development mode and run the app:
+    ```bash
+    export STREAMLIT_COMPONENT_DEV=1
+    streamlit run example_app.py
+    ```
+    The component will now connect to the Vite dev server instead of using the static build artifacts.
+
+### Building the v1 Component for Production
+
+To create the static frontend assets that will be packaged with the Python library, run the build command:
+```bash
+npm run build --prefix ffmpeg_component_v1/frontend
+```
+The output will be placed in `ffmpeg_component_v1/frontend/build`. The component will use these files by default when `STREAMLIT_COMPONENT_DEV` is not set to `1`.
