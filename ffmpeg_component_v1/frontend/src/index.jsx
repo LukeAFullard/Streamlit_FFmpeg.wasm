@@ -1,36 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Streamlit, withStreamlitConnection } from 'streamlit-component-lib';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-
-/**
- * Decodes a base64 string into a Uint8Array.
- * @param {string} base64 The base64-encoded string.
- * @returns {Uint8Array} The decoded binary data.
- */
-function base64ToUint8Array(base64) {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-/**
- * Encodes a Uint8Array into a base64 string in chunks to avoid stack overflow.
- * @param {Uint8Array} bytes The binary data to encode.
- * @returns {string} The base64-encoded string.
- */
-function uint8ArrayToBase64(bytes) {
-  const CHUNK_SIZE = 0x8000; // 32KB chunks
-  let b64 = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, i + CHUNK_SIZE);
-    b64 += String.fromCharCode.apply(null, chunk);
-  }
-  return btoa(b64);
-}
+import { base64ToUint8Array, uint8ArrayToBase64 } from './utils';
+import './spinner.css';
 
 function App(props) {
   const [ffmpeg, setFFmpeg] = useState(null);
@@ -123,7 +95,10 @@ function App(props) {
 
   return (
     <div>
-      <p>Status: {status}</p>
+      <p>
+        Status: {status}
+        {(status === 'loading ffmpeg' || status.startsWith('Processing')) && <div className="loader" style={{ marginLeft: '10px' }}></div>}
+      </p>
       <p>Drop a file in the parent app to process.</p>
       {logs.length > 0 && (
         <div style={{ marginTop: '10px', padding: '5px', border: '1px solid #ccc', maxHeight: '150px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px' }}>

@@ -17,37 +17,9 @@ if (!FFmpegLib) {
 }
 const { FFmpeg } = FFmpegLib;
 
+import { base64ToUint8Array, uint8ArrayToBase64 } from './utils.js';
+
 let ffmpeg = null;
-
-/**
- * Decodes a base64 string into a Uint8Array.
- * @param {string} base64 The base64-encoded string.
- * @returns {Uint8Array} The decoded binary data.
- */
-function base64ToUint8Array(base64) {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-/**
- * Encodes a Uint8Array into a base64 string in chunks to avoid stack overflow.
- * @param {Uint8Array} bytes The binary data to encode.
- * @returns {string} The base64-encoded string.
- */
-function uint8ArrayToBase64(bytes) {
-  const CHUNK_SIZE = 0x8000;
-  let b64 = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, i + CHUNK_SIZE);
-    b64 += String.fromCharCode.apply(null, chunk);
-  }
-  return btoa(b64);
-}
 
 async function ensureFFmpeg() {
   const statusEl = document.getElementById('status');
@@ -107,19 +79,34 @@ function onRender(event) {
     const args = event.detail.args;
     const root = document.getElementById('root');
     if (root.innerHTML === "") {
-        root.innerHTML = `<p id="status">Status: Idle</p>`;
+        root.innerHTML = `<p id="status-container">Status: <span id="status">Idle</span></p>`;
     }
     const statusEl = document.getElementById('status');
+    const statusContainer = document.getElementById('status-container');
+
+    // Ensure loader div exists
+    let loader = document.getElementById('loader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'loader';
+        loader.className = 'loader';
+        loader.style.display = 'none'; // Initially hidden
+        statusContainer.appendChild(loader);
+    }
 
     if (args.command && args.data) {
-        statusEl.textContent = 'Status: Processing...';
+        statusEl.textContent = 'Processing...';
+        loader.style.display = 'inline-block';
+
         runCommand(args.data, args.command, args.max_size_mb).then((b64) => {
             Streamlit.setComponentValue({ output: b64 });
-            statusEl.textContent = 'Status: Done!';
+            statusEl.textContent = 'Done!';
+            loader.style.display = 'none';
         }).catch((err) => {
             console.error(err);
             Streamlit.setComponentValue({ error: String(err) });
-            statusEl.textContent = `Status: Error - ${err}`;
+            statusEl.textContent = `Error - ${err}`;
+            loader.style.display = 'none';
         });
     }
 }
