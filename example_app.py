@@ -40,21 +40,22 @@ if f:
 
     if st.button("Run Operation"):
         command, output_filename, output_mime, output_type = [], "", "", "video"
+        input_filename = f.name
 
         if operation == "Trim to 5 seconds":
-            command, output_filename, output_mime = ['-i', 'input.mp4', '-t', '5', '-c', 'copy', 'output.webm'], "trimmed.webm", "video/webm"
+            command, output_filename, output_mime = ['-i', input_filename, '-t', '5', '-c', 'copy', 'output.webm'], "trimmed.webm", "video/webm"
         elif operation == "Convert to Grayscale":
             st.info("Re-encoding is slower than copying codecs.")
-            command, output_filename, output_mime = ['-i', 'input.mp4', '-vf', 'format=gray', 'output.webm'], "grayscale.webm", "video/webm"
+            command, output_filename, output_mime = ['-i', input_filename, '-vf', 'format=gray', 'output.webm'], "grayscale.webm", "video/webm"
         elif operation == "Create a 3-second GIF":
-            command, output_filename, output_mime, output_type = ['-i', 'input.mp4', '-t', '3', '-vf', 'fps=10,scale=320:-1:flags=lanczos', 'output.gif'], "animation.gif", "image/gif", "image"
+            command, output_filename, output_mime, output_type = ['-i', input_filename, '-t', '3', '-vf', 'fps=10,scale=320:-1:flags=lanczos', 'output.gif'], "animation.gif", "image/gif", "image"
         elif operation == "Extract Audio (AAC)":
-            command, output_filename, output_mime, output_type = ['-i', 'input.mp4', '-vn', '-acodec', 'copy', 'output.aac'], "audio.aac", "audio/aac", "audio"
+            command, output_filename, output_mime, output_type = ['-i', input_filename, '-vn', '-acodec', 'copy', 'output.aac'], "audio.aac", "audio/aac", "audio"
 
         if command:
             with st.spinner('Processing... This may take a moment.'):
                 try:
-                    out = ffmpeg_process(video_data, command)
+                    out = ffmpeg_process(video_data, command, filename=input_filename)
                     if out:
                         st.success("Processing complete!")
                         if output_type == "video": st.video(out, format=output_mime)

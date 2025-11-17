@@ -30,6 +30,7 @@ class FFmpegError(Exception):
 def ffmpeg_process_stlite(
     data: bytes,
     command: List[str],
+    filename: str,
     max_size_mb: int = 100,
     timeout: int = 300
 ) -> Optional[bytes]:
@@ -39,6 +40,7 @@ def ffmpeg_process_stlite(
     Args:
         data: Input video file as bytes.
         command: FFmpeg command arguments (e.g., ['-i', 'input.mp4', '-t', '5', 'output.webm']).
+        filename: The name of the input file (e.g., "input.mp4").
         max_size_mb: Maximum file size in MB (default 100MB).
 
     Returns:
@@ -61,7 +63,10 @@ def ffmpeg_process_stlite(
     if not command or not isinstance(command, list):
         raise ValueError("The 'command' argument must be a non-empty list of strings.")
 
-    logger.info(f"Processing {file_size_mb:.1f}MB file with command: {' '.join(command)}")
+    if not filename or not isinstance(filename, str):
+        raise ValueError("The 'filename' argument must be a non-empty string.")
+
+    logger.info(f"Processing {file_size_mb:.1f}MB file '{filename}' with command: {' '.join(command)}")
 
     try:
         b64_data = base64.b64encode(data).decode('ascii')
@@ -73,6 +78,7 @@ def ffmpeg_process_stlite(
             return _component_func(
                 data=b64_data,
                 command=command,
+                filename=filename,
                 key=component_key,
                 max_size_mb=max_size_mb
             )
