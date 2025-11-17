@@ -12,13 +12,16 @@ async function ensureFFmpeg() {
     ffmpeg = new FFmpeg();
     ffmpeg.on('log', ({ message }) => {
       console.log(message);
-      statusEl.textContent = `Status: ${message}`;
+      const statusEl = document.getElementById('status');
+      if (statusEl) {
+        statusEl.textContent = `Status: ${message}`;
+      }
     });
     await ffmpeg.load();
   }
 }
 
-async function runTrim(b64_input, seconds) {
+async function runCommand(b64_input, command) {
   await ensureFFmpeg();
 
   // convert base64 to Uint8Array
@@ -29,9 +32,11 @@ async function runTrim(b64_input, seconds) {
     bytes[i] = binary.charCodeAt(i);
   }
 
-  await ffmpeg.writeFile('input.mp4', bytes);
-  await ffmpeg.exec(['-i', 'input.mp4', '-c', 'copy', '-t', seconds.toString(), 'output.webm']);
-  const out = await ffmpeg.readFile('output.webm');
+  const inputFilename = command[command.indexOf('-i') + 1];
+  await ffmpeg.writeFile(inputFilename, bytes);
+  await ffmpeg.exec(command);
+  const outputFilename = command[command.length - 1];
+  const out = await ffmpeg.readFile(outputFilename);
 
   // convert Uint8Array back to base64
   let outBin = '';
@@ -41,7 +46,6 @@ async function runTrim(b64_input, seconds) {
   }
   return btoa(outBin);
 }
-
 
 function onRender(event) {
     const args = event.detail.args;
@@ -58,9 +62,9 @@ function onRender(event) {
     }
     const statusEl = document.getElementById('status');
 
-    if (args.cmd === 'trim' && args.data) {
+    if (args.command && args.data) {
         statusEl.textContent = 'Status: Processing...';
-        runTrim(args.data, args.seconds || 10).then((b64) => {
+        runCommand(args.data, args.command).then((b64) => {
             Streamlit.setComponentValue({ output: b64 });
             statusEl.textContent = 'Status: Done!';
         }).catch((err) => {
@@ -70,7 +74,6 @@ function onRender(event) {
         });
     }
 }
-
 
 Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
 Streamlit.setFrameHeight(100);

@@ -1,26 +1,55 @@
 # Streamlit FFmpeg.wasm Components
 
-This repository contains two powerful, reusable Streamlit components that run FFmpeg.wasm in the browser. This allows you to process short video files entirely on the client-side, saving server resources and improving privacy.
+This repository contains two powerful, reusable Streamlit components that run FFmpeg.wasm in the browser. This allows you to process video, audio, and image files entirely on the client-side, saving server resources and improving privacy.
 
 Two component flavors are provided:
-1.  **v1-style (Server-Backed):** A classic Streamlit component for standard, server-hosted applications.
-2.  **v2-style (Frontend-Only):** A lightweight, static component designed for browser-only environments like `stlite`.
+1.  **v1-style (Server-Backed):** A classic Streamlit component for standard, server-hosted applications. It bundles the frontend code and serves it as part of the Streamlit application.
+2.  **v2-style (Frontend-Only):** A lightweight, static component designed for browser-only environments like `stlite`. It loads its dependencies from a CDN.
 
 ---
 
-## v1 Component (`ffmpeg_component`)
-
-This is a standard Streamlit component that is ideal for server-hosted Streamlit applications (e.g., running on Streamlit Community Cloud, a VPS, or locally). It bundles the frontend code and serves it as part of the Streamlit application.
-
-### Installation
+## Installation
 
 ```bash
 pip install streamlit-ffmpeg-wasm
 ```
 
-### Usage
+---
 
-The `ffmpeg_process` function allows you to run arbitrary FFmpeg commands.
+## Functionality & Examples
+
+Both components now support arbitrary FFmpeg commands. The primary difference is how they are imported and used in your Streamlit application.
+
+Here are some of the things you can do:
+
+*   **Trim Videos:** Quickly cut a video to a specific duration.
+    ```python
+    command = ['-i', 'input.mp4', '-t', '5', '-c', 'copy', 'output.webm']
+    ```
+*   **Convert Video Format:** Change the container or codecs of a video.
+    ```python
+    command = ['-i', 'input.mov', 'output.mp4']
+    ```
+*   **Apply Filters:** Perform operations like converting to grayscale, rotating, or changing speed.
+    ```python
+    command = ['-i', 'input.mp4', '-vf', 'format=gray', 'output.webm']
+    ```
+*   **Create GIFs:** Convert a segment of a video into an animated GIF.
+    ```python
+    command = ['-i', 'input.mp4', '-t', '3', '-vf', 'fps=10,scale=320:-1:flags=lanczos', 'output.gif']
+    ```
+*   **Extract Audio:** Pull the audio track from a video file.
+    ```python
+    command = ['-i', 'input.mp4', '-vn', '-acodec', 'copy', 'output.aac']
+    ```
+
+---
+
+## Usage
+
+### v1 Component (`ffmpeg_component`)
+
+Ideal for server-hosted Streamlit applications.
 
 ```python
 import streamlit as st
@@ -28,7 +57,7 @@ from ffmpeg_component import ffmpeg_process
 
 st.title("v1 FFmpeg Component Demo")
 
-f = st.file_uploader('Upload an MP4 video', type=['mp4'])
+f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
 
 if f:
     st.video(f)
@@ -43,58 +72,47 @@ if f:
                 st.video(out, format='video/webm')
                 st.download_button('Download Trimmed', out, 'trimmed.webm', 'video/webm')
 ```
-
-See `example_app.py` for a more detailed demonstration.
+See `example_app.py` for more detailed examples.
 
 ---
 
-## v2 Component (`ffmpeg_component_stlite`)
+### v2 Component (`ffmpeg_component_stlite`)
 
-This is a frontend-only component specifically designed for browser-based environments where a Python backend is not available for serving assets, such as **stlite**. It loads its dependencies from a CDN and runs entirely in the browser.
+Designed for browser-only environments like **stlite**.
 
-### Important Version Note
-
-**Compatibility:** The v2 component relies on features available in **Streamlit version 1.51.0 and newer**. It will not work with older versions.
-
-### Usage
-
-The `ffmpeg_trim_stlite` function provides a simplified interface for trimming videos.
+**Compatibility:** Requires **Streamlit version 1.51.0 or newer**.
 
 ```python
 import streamlit as st
-from ffmpeg_component_stlite import ffmpeg_trim_stlite
+from ffmpeg_component_stlite import ffmpeg_process_stlite
 
 st.title("v2 stlite FFmpeg Component Demo")
 
-f = st.file_uploader('Upload a video to trim', type=['mp4', 'mov'])
+f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
 
 if f:
     st.video(f)
     video_data = f.getvalue()
 
-    seconds = st.slider("Trim to (seconds):", 1, 30, 10)
-
-    if st.button('Trim Video'):
+    if st.button('Convert to Grayscale'):
         with st.spinner('Processing in browser...'):
-            out = ffmpeg_trim_stlite(data=video_data, seconds=seconds)
+            command = ['-i', 'input.mp4', '-vf', 'format=gray', 'output.webm']
+            out = ffmpeg_process_stlite(data=video_data, command=command)
             if out:
                 st.video(out, format='video/webm')
-                st.download_button('Download Trimmed', out, 'trimmed.webm', 'video/webm')
+                st.download_button('Download Grayscale', out, 'grayscale.webm', 'video/webm')
 ```
-
-See `example_stlite_app.py` for a full example.
+See `example_stlite_app.py` for more detailed examples.
 
 ---
 
 ## Development
 
-To set up the development environment:
-
 1.  **Install Python dependencies:**
     ```bash
     pip install streamlit
     ```
-2.  **Build the v1 frontend:**
+2.  **Build the v1 frontend (if modifying):**
     ```bash
     cd ffmpeg_component/frontend
     npm install
