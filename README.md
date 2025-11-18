@@ -161,6 +161,25 @@ Client-side processing with FFmpeg.wasm is powerful, but it's important to be aw
 
 ---
 
+## Troubleshooting
+
+### FFmpeg library fails to load (v2 component)
+- Verify your internet connection is active, as the library is loaded from a CDN.
+- Check your browser's developer console for any Content Security Policy (CSP) or CORS errors.
+- In corporate environments, a firewall may be blocking access to `unpkg.com`.
+
+### Browser tab crashes during processing
+- This is almost always a memory issue. The most effective solution is to **reduce the input file size**.
+- Close other memory-intensive applications or browser tabs.
+- Use a desktop browser instead of a mobile browser, as they generally have higher memory limits.
+
+### Component appears frozen or unresponsive
+- Heavy FFmpeg operations, like re-encoding a large file, can take several minutes. Please be patient.
+- Check your system's CPU usage to see if FFmpeg is actively processing.
+- If the process seems genuinely stuck, you may need to reload the page.
+
+---
+
 ## Development
 
 This project uses Python with Streamlit for the backend and Node.js for the v1 component's frontend. The v2 component is static and requires no build step.
@@ -207,3 +226,18 @@ To create the static frontend assets that will be packaged with the Python libra
 npm run build --prefix ffmpeg_component_v1/frontend
 ```
 The output will be placed in `ffmpeg_component_v1/frontend/build`. The component will use these files by default when `STREAMLIT_COMPONENT_DEV` is not set to `1`.
+
+### Verifying SRI Hashes for the v2 Component
+
+The v2 component loads dependencies from a CDN and uses Subresource Integrity (SRI) hashes to ensure they have not been tampered with. If you upgrade a dependency URL, you must also update its integrity hash.
+
+You can generate a new SHA-384 hash with the following command:
+```bash
+# Example for FFmpeg
+curl <script-src-url> | openssl dgst -sha384 -binary | base64
+```
+For example, to verify the FFmpeg hash:
+```bash
+curl https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js | openssl dgst -sha384 -binary | base64
+```
+Update the `integrity` attribute in `ffmpeg_component_v2/frontend/public/index.html` with the new hash.

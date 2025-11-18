@@ -3,25 +3,23 @@ const { Streamlit } = window.Streamlit;
 
 // Robustly check for the FFmpeg library on the window object
 const FFmpegLib = window.FFmpegWASM || window.FFmpeg;
+let ffmpegLoadError = null;
+
 if (!FFmpegLib) {
-  const errorMsg = 'FFmpeg library not loaded from CDN. Check script tags in index.html.';
-  console.error(errorMsg);
-  Streamlit.setComponentValue({ error: errorMsg });
-  // Render an error message in the component UI
-  const root = document.getElementById('root');
-  if (root) {
-    root.innerHTML = `<div style="color: red;">${errorMsg}</div>`;
-  }
-  // Stop execution if the library is missing
-  throw new Error(errorMsg);
+  ffmpegLoadError = 'FFmpeg library not loaded from CDN. Check script tags in index.html.';
+  console.error(ffmpegLoadError);
 }
-const { FFmpeg } = FFmpegLib;
+
+const { FFmpeg } = FFmpegLib || {}; // Safely destructure
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from './utils.js';
 
 let ffmpeg = null;
 
 async function ensureFFmpeg() {
+  if (ffmpegLoadError) {
+    throw new Error(ffmpegLoadError);
+  }
   const statusEl = document.getElementById('status');
   if (!ffmpeg) {
     statusEl.textContent = 'Status: Loading ffmpeg-core.js';
@@ -83,6 +81,13 @@ function onRender(event) {
     }
     const statusEl = document.getElementById('status');
     const statusContainer = document.getElementById('status-container');
+
+    // Handle the case where FFmpeg failed to load
+    if (ffmpegLoadError) {
+        statusEl.textContent = `Error - ${ffmpegLoadError}`;
+        Streamlit.setComponentValue({ error: ffmpegLoadError });
+        return; // Stop further execution
+    }
 
     // Ensure loader div exists
     let loader = document.getElementById('loader');
