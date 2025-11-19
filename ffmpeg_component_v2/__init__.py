@@ -1,4 +1,4 @@
-import streamlit.components.v1 as components
+import streamlit as st
 import base64
 import os
 import logging
@@ -14,11 +14,16 @@ _RELEASE = os.getenv("STREAMLIT_COMPONENT_DEV", "0") != "1"
 
 # The v2 component is served statically from the frontend/public directory
 parent_dir = os.path.dirname(os.path.abspath(__file__))
-component_dir = os.path.join(parent_dir, "frontend/public")
+build_dir = os.path.join(parent_dir, "frontend/public")
 
-_component_func = components.declare_component(
-    'ffmpeg_component_v2',
-    path=component_dir
+# Correctly define the v2 component by reading the HTML file.
+# Streamlit will handle serving the associated JS and CSS assets.
+with open(os.path.join(build_dir, "index.html"), "r") as f:
+    html_content = f.read()
+
+_component_func = st.components.v2.component(
+    "ffmpeg_component_v2",
+    html=html_content,
 )
 
 
