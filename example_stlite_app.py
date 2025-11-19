@@ -4,16 +4,7 @@ from ffmpeg_component_v2 import ffmpeg_process_v2, FFmpegError
 st.set_page_config(layout="wide")
 
 st.title("v2 FFmpeg.wasm Component (Modern API)")
-st.markdown("Uses Streamlit's v2 component API with bidirectional state management.")
-
-# IMPORTANT: Load FFmpeg library globally for v2 component
-st.html("""
-<script
-    src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"
-    integrity="sha384-6gtICseWoSfROfflbGSkg1kwPTH+2SxMvyn0e3THJbNoyPxx5tzNk4EXfLIHD2iD"
-    crossorigin="anonymous"
-></script>
-""")
+st.markdown("Uses Streamlit's v2 component API with bidirectional state management. The component now handles its own dependency loading.")
 
 # Display file size recommendations
 st.info("""
