@@ -1,29 +1,46 @@
+# ffmpeg_component_v2/__init__.py
 import streamlit as st
 import base64
 import os
 import logging
 import hashlib
 from typing import Optional, List
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
-# Set up logger
 logger = logging.getLogger(__name__)
 
-# Check environment variable to determine if we're in development, default to release mode
-_RELEASE = os.getenv("STREAMLIT_COMPONENT_DEV", "0") != "1"
-
-# The v2 component is served statically from the frontend/public directory
+# Read the bundled JavaScript as a string (NOT the HTML file)
 parent_dir = os.path.dirname(os.path.abspath(__file__))
-build_dir = os.path.join(parent_dir, "frontend/public")
 
-# Correctly define the v2 component by reading the HTML file.
-# Streamlit will handle serving the associated JS and CSS assets.
-with open(os.path.join(build_dir, "index.html"), "r") as f:
-    html_content = f.read()
+# You need to create a NEW component.js file (not bundle.js with v1 API)
+with open(os.path.join(parent_dir, "frontend/public/component.js"), "r") as f:
+    js_content = f.read()
 
+# Register TRUE v2 component with inline JS
 _component_func = st.components.v2.component(
     "ffmpeg_component_v2",
-    html=html_content,
+    html="""
+    <div id="ffmpeg-container">
+        <p id="status">Ready to process video</p>
+        <div id="loader" class="loader" style="display: none;"></div>
+    </div>
+    """,
+    js=js_content,  # Inline JavaScript string, NOT HTML with script tags
+    css="""
+    .loader {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        margin-left: 10px;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    """
 )
 
 
@@ -32,28 +49,16 @@ class FFmpegError(Exception):
     pass
 
 
-def ffmpeg_process_stlite(
+def ffmpeg_process_v2(
     data: bytes,
     command: List[str],
     filename: str,
-    max_size_mb: int = 100,
-    timeout: int = 300
+    max_size_mb: int = 100
 ) -> Optional[bytes]:
     """
-    Runs an FFmpeg command on the client-side using a component compatible with stlite.
+    Process video using FFmpeg.wasm with Streamlit v2 component API.
 
-    Args:
-        data: Input video file as bytes.
-        command: FFmpeg command arguments (e.g., ['-i', 'input.mp4', '-t', '5', 'output.webm']).
-        filename: The name of the input file (e.g., "input.mp4").
-        max_size_mb: Maximum file size in MB (default 100MB).
-
-    Returns:
-        Processed video as bytes, or None if the operation is cancelled by the user.
-
-    Raises:
-        ValueError: If input validation fails.
-        FFmpegError: If FFmpeg processing fails on the client-side.
+    Requires Streamlit >= 1.51.0
     """
     if not data:
         raise ValueError("Input data cannot be empty.")
@@ -71,54 +76,38 @@ def ffmpeg_process_stlite(
     if not filename or not isinstance(filename, str):
         raise ValueError("The 'filename' argument must be a non-empty string.")
 
-    logger.info(f"Processing {file_size_mb:.1f}MB file '{filename}' with command: {' '.join(command)}")
+    logger.info(f"Processing {file_size_mb:.1f}MB file '{filename}' with v2 component")
 
-    try:
-        b64_data = base64.b64encode(data).decode('ascii')
-        data_hash = hashlib.md5(data).hexdigest()[:8]
-        cmd_hash = hashlib.md5(str(command).encode()).hexdigest()[:8]
-        component_key = f"ffmpeg_stlite_{data_hash}_{cmd_hash}"
+    b64_data = base64.b64encode(data).decode('ascii')
+    data_hash = hashlib.md5(data).hexdigest()[:8]
+    cmd_hash = hashlib.md5(str(command).encode()).hexdigest()[:8]
+    component_key = f"ffmpeg_v2_{data_hash}_{cmd_hash}"
 
-        def component_call():
-            return _component_func(
-                data=b64_data,
-                command=command,
-                filename=filename,
-                key=component_key,
-                max_size_mb=max_size_mb
-            )
+    # V2 API: Pass data and define callbacks
+    result = _component_func(
+        data={
+            'videoData': b64_data,
+            'command': command,
+            'filename': filename,
+            'maxSizeMB': max_size_mb
+        },
+        key=component_key,
+        # V2 requires callbacks for each state/trigger value
+        on_output_change=lambda: None,  # State value
+        on_error_change=lambda: None,   # State value
+        on_progress_change=lambda: None,  # State value
+        on_complete_change=lambda: None,  # Trigger value
+    )
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(component_call)
-            try:
-                result = future.result(timeout=timeout)
-            except TimeoutError:
-                raise FFmpegError(f"Processing timed out after {timeout} seconds.")
+    # V2 components return objects with attribute access (NOT dict)
+    if result.error:
+        logger.error(f"FFmpeg v2 processing failed: {result.error}")
+        raise FFmpegError(f"Client-side error: {result.error}")
 
-        if result is None:
-            logger.warning("Component returned None. This may indicate the user navigated away.")
-            return None
-
-        if 'error' in result:
-            error_msg = result['error']
-            logger.error(f"FFmpeg processing failed on the client: {error_msg}")
-            raise FFmpegError(f"A client-side FFmpeg error occurred: {error_msg}")
-
-        output_b64 = result.get('output')
-        if not output_b64:
-            raise FFmpegError("Processing completed, but the component did not return any output data.")
-
-        output_data = base64.b64decode(output_b64)
+    if result.output:
+        output_data = base64.b64decode(result.output)
         output_size_mb = len(output_data) / (1024 * 1024)
-        logger.info(f"Processing successful. Output size: {output_size_mb:.1f}MB")
-
+        logger.info(f"V2 processing successful. Output size: {output_size_mb:.1f}MB")
         return output_data
 
-    except KeyboardInterrupt:
-        logger.warning("Processing was cancelled by the user.")
-        return None
-    except FFmpegError:
-        raise
-    except Exception as e:
-        logger.exception("An unexpected error occurred while running the stlite FFmpeg component.")
-        raise FFmpegError(f"An unexpected error occurred: {e}") from e
+    return None

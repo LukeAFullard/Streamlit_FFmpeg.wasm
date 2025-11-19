@@ -2,9 +2,10 @@
 
 This repository contains two powerful, reusable Streamlit components that run FFmpeg.wasm in the browser. This allows you to process video, audio, and image files entirely on the client-side, saving server resources and improving privacy.
 
-Two component flavors are provided:
-1.  **v1 Component (Server-Backed):** A classic Streamlit component for standard, server-hosted applications. It bundles the frontend code and serves it as part of the Streamlit application.
-2.  **v2 Component (Frontend-Only):** A lightweight, static component designed for browser-only environments like `stlite`. It loads its dependencies from a CDN.
+This repository provides two distinct versions of the component to ensure maximum compatibility:
+
+1.  **v1 Component (IFrame-based):** A classic Streamlit component that works with **all versions of Streamlit**. It is rendered inside an IFrame, bundling its own frontend code. This is the most stable and backward-compatible option.
+2.  **v2 Component (Modern API):** A modern, high-performance component that uses Streamlit's latest component API. It renders directly into the DOM (no IFrame) for a more seamless experience and supports bidirectional communication. This component requires **Streamlit >= 1.51.0**.
 
 ---
 
@@ -49,7 +50,7 @@ Here are some of the things you can do:
 
 ### v1 Component (`ffmpeg_component_v1`)
 
-Ideal for server-hosted Streamlit applications.
+Ideal for server-hosted Streamlit applications and environments requiring compatibility with Streamlit versions older than 1.51.0.
 
 **Example:**
 ```python
@@ -96,47 +97,62 @@ ffmpeg_process(
 
 ---
 
-### v2 Component (`ffmpeg_component_v2`)
+### v2 Component (`ffmpeg_component_v2`) - Modern API
 
-Designed for browser-only environments like **stlite**.
+Uses the modern, iframe-less component API, ideal for `stlite` or high-performance apps.
 
 **Compatibility:** Requires **Streamlit version 1.51.0 or newer**.
+
+**Important Prerequisite:** The v2 component does not bundle the FFmpeg library. You **must** load it manually in your Streamlit app using `st.html`. This allows you to control the library version and ensures it is loaded only once.
 
 **Example:**
 ```python
 import streamlit as st
-from ffmpeg_component_v2 import ffmpeg_process_stlite, FFmpegError
+from ffmpeg_component_v2 import ffmpeg_process_v2, FFmpegError
 from typing import List, Optional
 
-st.title("v2 stlite FFmpeg Component Demo")
+st.title("v2 FFmpeg Component Demo (Modern API)")
+
+# IMPORTANT: Load the FFmpeg library for the v2 component
+st.html("""
+<script
+    src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"
+    integrity="sha384-6gtICseWoSfROfflbGSkg1kwPTH+2SxMvyn0e3THJbNoyPxx5tzNk4EXfLIHD2iD"
+    crossorigin="anonymous"
+></script>
+""")
 
 f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
 
 if f:
     video_data = f.getvalue()
     try:
-        command = ['-i', 'input.mp4', '-vf', 'format=gray', 'output.webm']
-        out = ffmpeg_process_stlite(data=video_data, command=command)
+        command = ['-i', f.name, '-vf', 'format=gray', 'output.webm']
+        out = ffmpeg_process_v2(
+            data=video_data,
+            command=command,
+            filename=f.name
+        )
         st.video(out, format='video/webm')
     except (FFmpegError, ValueError) as e:
         st.error(e)
 ```
 See `example_stlite_app.py` for more detailed examples.
 
-#### API Reference: `ffmpeg_process_stlite`
-
-The API for the v2 component is identical to the v1 component.
+#### API Reference: `ffmpeg_process_v2`
 
 ```python
-ffmpeg_process_stlite(
+ffmpeg_process_v2(
     data: bytes,
     command: List[str],
+    filename: str,
     max_size_mb: int = 100
 ) -> Optional[bytes]
 ```
 
 *   **`data`**: The raw byte content of the media file.
-*   **`command`**: A list of FFmpeg command-line arguments.
+*   **`command`**: A list of FFmpeg command-line arguments. The input filename in the command should match the `filename` argument.
+*   **`filename`**: The original name of the file being processed. This is used to create the file in FFmpeg's virtual filesystem (e.g., `input.mp4`).
 *   **`max_size_mb`**: The maximum allowable file size in megabytes. Defaults to `100`.
 
 **Returns:**
@@ -164,8 +180,9 @@ Client-side processing with FFmpeg.wasm is powerful, but it's important to be aw
 ## Troubleshooting
 
 ### FFmpeg library fails to load (v2 component)
-- Verify your internet connection is active, as the library is loaded from a CDN.
-- Check your browser's developer console for any Content Security Policy (CSP) or CORS errors.
+- This typically happens when the `<script>` tag included via `st.html` fails to load.
+- Verify your internet connection is active, as the library is loaded from `unpkg.com` (a CDN).
+- Check your browser's developer console for any Content Security Policy (CSP) or CORS errors that might be blocking the script.
 - In corporate environments, a firewall may be blocking access to `unpkg.com`.
 
 ### Browser tab crashes during processing
@@ -182,7 +199,7 @@ Client-side processing with FFmpeg.wasm is powerful, but it's important to be aw
 
 ## Development
 
-This project uses Python with Streamlit for the backend and Node.js for the v1 component's frontend. The v2 component is static and requires no build step.
+This project uses Python with Streamlit for the backend. The v1 component has a Node.js frontend, while the v2 component is implemented with inline, static JavaScript and requires no build step.
 
 ### Initial Setup
 
@@ -227,17 +244,17 @@ npm run build --prefix ffmpeg_component_v1/frontend
 ```
 The output will be placed in `ffmpeg_component_v1/frontend/build`. The component will use these files by default when `STREAMLIT_COMPONENT_DEV` is not set to `1`.
 
-### Verifying SRI Hashes for the v2 Component
+### Verifying SRI Hashes for the FFmpeg Library
 
-The v2 component loads dependencies from a CDN and uses Subresource Integrity (SRI) hashes to ensure they have not been tampered with. If you upgrade a dependency URL, you must also update its integrity hash.
+The v2 component's example app uses Subresource Integrity (SRI) hashes in the `<script>` tag to ensure the FFmpeg library loaded from the CDN has not been tampered with. If you change the script URL, you **must** update its integrity hash.
 
 You can generate a new SHA-384 hash with the following command:
 ```bash
 # Example for FFmpeg
 curl <script-src-url> | openssl dgst -sha384 -binary | base64
 ```
-For example, to verify the FFmpeg hash:
+For example, to verify the FFmpeg hash used in the example app:
 ```bash
 curl https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js | openssl dgst -sha384 -binary | base64
 ```
-Update the `integrity` attribute in `ffmpeg_component_v2/frontend/public/index.html` with the new hash.
+Update the `integrity` attribute in the `st.html` call in your application with the new hash.
