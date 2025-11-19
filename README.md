@@ -5,7 +5,7 @@ This repository contains two powerful, reusable Streamlit components that run FF
 This repository provides two distinct versions of the component to ensure maximum compatibility:
 
 1.  **v1 Component (IFrame-based):** A classic Streamlit component that works with **all versions of Streamlit**. It is rendered inside an IFrame, bundling its own frontend code. This is the most stable and backward-compatible option.
-2.  **v2 Component (Modern API):** A modern, high-performance component that uses Streamlit's latest component API. It renders directly into the DOM (no IFrame) for a more seamless experience and supports bidirectional communication. This component requires **Streamlit >= 1.51.0**.
+2.  **v2 Component (Modern API):** A modern, high-performance component that uses Streamlit's latest component API. It renders directly into the DOM (no IFrame) for a more seamless experience and supports bidirectional communication. This component requires **Streamlit >= 1.51.0** and handles its own dependency loading.
 
 ---
 
@@ -103,7 +103,7 @@ Uses the modern, iframe-less component API, ideal for `stlite` or high-performan
 
 **Compatibility:** Requires **Streamlit version 1.51.0 or newer**.
 
-**Important Prerequisite:** The v2 component does not bundle the FFmpeg library. You **must** load it manually in your Streamlit app using `st.html`. This allows you to control the library version and ensures it is loaded only once.
+The component handles loading the `FFmpeg.wasm` library from a CDN automatically.
 
 **Example:**
 ```python
@@ -112,15 +112,6 @@ from ffmpeg_component_v2 import ffmpeg_process_v2, FFmpegError
 from typing import List, Optional
 
 st.title("v2 FFmpeg Component Demo (Modern API)")
-
-# IMPORTANT: Load the FFmpeg library for the v2 component
-st.html("""
-<script
-    src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"
-    integrity="sha384-6gtICseWoSfROfflbGSkg1kwPTH+2SxMvyn0e3THJbNoyPxx5tzNk4EXfLIHD2iD"
-    crossorigin="anonymous"
-></script>
-""")
 
 f = st.file_uploader('Upload a video', type=['mp4', 'mov'])
 
@@ -180,8 +171,8 @@ Client-side processing with FFmpeg.wasm is powerful, but it's important to be aw
 ## Troubleshooting
 
 ### FFmpeg library fails to load (v2 component)
-- This typically happens when the `<script>` tag included via `st.html` fails to load.
-- Verify your internet connection is active, as the library is loaded from `unpkg.com` (a CDN).
+- The component attempts to load the `FFmpeg.wasm` library from the `unpkg.com` CDN.
+- Verify your internet connection is active.
 - Check your browser's developer console for any Content Security Policy (CSP) or CORS errors that might be blocking the script.
 - In corporate environments, a firewall may be blocking access to `unpkg.com`.
 
@@ -243,18 +234,3 @@ To create the static frontend assets that will be packaged with the Python libra
 npm run build --prefix ffmpeg_component_v1/frontend
 ```
 The output will be placed in `ffmpeg_component_v1/frontend/build`. The component will use these files by default when `STREAMLIT_COMPONENT_DEV` is not set to `1`.
-
-### Verifying SRI Hashes for the FFmpeg Library
-
-The v2 component's example app uses Subresource Integrity (SRI) hashes in the `<script>` tag to ensure the FFmpeg library loaded from the CDN has not been tampered with. If you change the script URL, you **must** update its integrity hash.
-
-You can generate a new SHA-384 hash with the following command:
-```bash
-# Example for FFmpeg
-curl <script-src-url> | openssl dgst -sha384 -binary | base64
-```
-For example, to verify the FFmpeg hash used in the example app:
-```bash
-curl https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js | openssl dgst -sha384 -binary | base64
-```
-Update the `integrity` attribute in the `st.html` call in your application with the new hash.

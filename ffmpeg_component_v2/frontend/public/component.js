@@ -2,33 +2,51 @@
 // V2 Component - uses export default function pattern
 
 /**
- * Waits for the FFmpeg library to be loaded on the window object.
+ * Dynamically loads the FFmpeg library from a CDN and returns a Promise
+ * that resolves when the library is available on the window object.
+ * @param {string} src - The URL of the FFmpeg library.
  * @param {number} timeout - The maximum time to wait in milliseconds.
  * @returns {Promise<object>} A promise that resolves with the FFmpeg library object.
  */
-function waitForFFmpeg(timeout = 45000) { // Increased timeout to 45 seconds
+function loadFFmpeg(src = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js", timeout = 45000) {
     return new Promise((resolve, reject) => {
-        const startTime = Date.now();
-        const interval = setInterval(() => {
-            const FFLib = window.FFmpegWASM || window.FFmpeg;
-            if (FFLib) {
-                clearInterval(interval);
-                console.log('FFmpeg library found on window object.');
-                resolve(FFLib);
-            } else if (Date.now() - startTime > timeout) {
-                clearInterval(interval);
-                console.error('Timed out waiting for FFmpeg library to load.');
-                reject(new Error(
-                    'FFmpeg library not loaded within timeout. Ensure st.html with the script tag is placed before the component call.'
-                ));
+        // Check if the library is already loaded
+        if (window.FFmpeg) {
+            console.log("FFmpeg library already loaded.");
+            return resolve(window.FFmpeg);
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+
+        const timer = setTimeout(() => {
+            reject(new Error(`Timed out after ${timeout / 1000}s waiting for FFmpeg script to load.`));
+        }, timeout);
+
+        script.onload = () => {
+            clearTimeout(timer);
+            if (window.FFmpeg) {
+                console.log("FFmpeg library loaded successfully from CDN.");
+                resolve(window.FFmpeg);
+            } else {
+                reject(new Error("Script loaded, but window.FFmpeg is not defined."));
             }
-        }, 100); // Check every 100ms
+        };
+
+        script.onerror = () => {
+            clearTimeout(timer);
+            reject(new Error(`Failed to load FFmpeg script from ${src}`));
+        };
+
+        document.head.appendChild(script);
+        console.log("Initiated FFmpeg library download from CDN...");
     });
 }
 
+
 // V2 Component Export - this is the required pattern
 export default function(component) {
-    // V2 API: Destructure component args
     const { setStateValue, setTriggerValue, data, parentElement } = component;
     console.log('Component mounted with data:', data);
 
@@ -37,7 +55,6 @@ export default function(component) {
 
     let ffmpeg = null;
 
-    // Utility: Decode base64 to Uint8Array
     function base64ToUint8Array(base64) {
         const binaryString = atob(base64);
         const len = binaryString.length;
@@ -48,9 +65,8 @@ export default function(component) {
         return bytes;
     }
 
-    // Utility: Encode Uint8Array to base64 (chunked to avoid stack overflow)
     function uint8ArrayToBase64(bytes) {
-        const CHUNK_SIZE = 0x8000; // 32KB chunks
+        const CHUNK_SIZE = 0x8000;
         let b64 = '';
         for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
             const chunk = bytes.subarray(i, i + CHUNK_SIZE);
@@ -61,28 +77,19 @@ export default function(component) {
 
     async function ensureFFmpeg(FFmpegLib) {
         if (!ffmpeg) {
-            console.log('Initializing FFmpeg for the first time.');
             statusEl.textContent = 'Loading FFmpeg...';
             loaderEl.style.display = 'inline-block';
-
             const { FFmpeg } = FFmpegLib;
             ffmpeg = new FFmpeg();
-
-            ffmpeg.on('log', ({ message }) => {
-                console.log('[FFmpeg Log]', message);
-            });
-
+            ffmpeg.on('log', ({ message }) => console.log('[FFmpeg Log]', message));
             ffmpeg.on('progress', ({ progress }) => {
                 const percent = Math.round(progress * 100);
                 statusEl.textContent = `Processing: ${percent}%`;
                 setStateValue('progress', percent);
             });
-
             await ffmpeg.load();
             console.log('FFmpeg core loaded.');
             loaderEl.style.display = 'none';
-        } else {
-            console.log('Reusing existing FFmpeg instance.');
         }
         return ffmpeg;
     }
@@ -91,68 +98,41 @@ export default function(component) {
         console.log('Starting video processing...');
         let inputFilename = null;
         let outputFilename = null;
-        let inputBytes = null;
         let ff;
 
         try {
-            // Wait for the library to be available before doing anything
-            const FFmpegLib = await waitForFFmpeg();
+            const FFmpegLib = await loadFFmpeg();
             ff = await ensureFFmpeg(FFmpegLib);
 
-            console.log('Step 1: Decoding video data...');
             statusEl.textContent = 'Decoding video data...';
             loaderEl.style.display = 'inline-block';
 
-            // Validate size
-            const estimatedSizeMB = (data.videoData.length * 0.75) / (1024 * 1024);
-            if (estimatedSizeMB > data.maxSizeMB) {
-                throw new Error(`File too large: ${estimatedSizeMB.toFixed(1)}MB. Limit is ${data.maxSizeMB}MB.`);
-            }
-            console.log(`File size check passed (${estimatedSizeMB.toFixed(1)}MB).`);
-
-            // Decode input
-            inputBytes = base64ToUint8Array(data.videoData);
+            const inputBytes = base64ToUint8Array(data.videoData);
             inputFilename = data.filename;
             outputFilename = data.command[data.command.length - 1];
-            console.log(`Input: ${inputFilename}, Output: ${outputFilename}`);
 
-            // Write input file
-            console.log('Step 2: Writing input file to virtual filesystem...');
-            statusEl.textContent = 'Writing input file...';
             await ff.writeFile(inputFilename, inputBytes);
-            console.log('Input file written successfully.');
+            console.log('Input file written.');
 
-            // Run FFmpeg command
-            console.log('Step 3: Executing FFmpeg command:', data.command);
-            statusEl.textContent = 'Processing with FFmpeg...';
             await ff.exec(data.command);
-            console.log('FFmpeg command executed successfully.');
+            console.log('FFmpeg command executed.');
 
-            // Read output file
-            console.log('Step 4: Reading output file...');
-            statusEl.textContent = 'Reading output file...';
             const outputData = await ff.readFile(outputFilename);
-            console.log(`Output file read successfully (${outputData.length} bytes).`);
+            console.log('Output file read.');
 
-            // Encode output
-            console.log('Step 5: Encoding output to base64...');
-            statusEl.textContent = 'Encoding output...';
             const outputB64 = uint8ArrayToBase64(new Uint8Array(outputData));
-            console.log('Output encoded successfully.');
+            console.log('Output encoded.');
 
-            // V2 API: Set state values
-            console.log('Step 6: Setting component state for success...');
             setStateValue('output', outputB64);
             setStateValue('error', null);
             setStateValue('progress', 100);
             setTriggerValue('complete', true);
-            console.log('Component state updated.');
 
             statusEl.textContent = 'Complete!';
             loaderEl.style.display = 'none';
 
         } catch (error) {
-            console.error('[FFmpeg Error in processVideo]', error);
+            console.error('[FFmpeg Error]', error);
             const errorMessage = error.message || 'An unknown error occurred.';
             setStateValue('error', errorMessage);
             setStateValue('output', null);
@@ -160,34 +140,17 @@ export default function(component) {
             loaderEl.style.display = 'none';
 
         } finally {
-            console.log('Step 7: Cleaning up virtual filesystem...');
-            inputBytes = null; // Help GC
-
             try {
-                if (ff && inputFilename) {
-                    await ff.deleteFile(inputFilename);
-                    console.log(`Cleaned up ${inputFilename}.`);
-                }
+                if (ff && inputFilename) await ff.deleteFile(inputFilename);
+                if (ff && outputFilename) await ff.deleteFile(outputFilename);
             } catch (e) {
-                console.warn(`Could not clean up input file ${inputFilename}:`, e);
+                console.warn('Could not clean up virtual files:', e);
             }
-
-            try {
-                if (ff && outputFilename) {
-                    await ff.deleteFile(outputFilename);
-                    console.log(`Cleaned up ${outputFilename}.`);
-                }
-            } catch (e) {
-                console.warn(`Could not clean up output file ${outputFilename}:`, e);
-            }
-            console.log('Cleanup complete.');
         }
     }
 
-    // Start processing when component mounts
     processVideo();
 
-    // V2 API: Optional cleanup function called when component unmounts
     return () => {
         console.log('[FFmpeg Component] Unmounted');
     };
